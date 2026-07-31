@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peta Interaktif Penggunaan Lahan - Padukuhan Penggung</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Peta Interaktif Visualisasi Penggunaan Lahan (Hutan, Sawah, Pemukiman, Kebun) di Padukuhan Penggung, Giriwondo. Analisis spasial digital berbasis Leaflet.js.">
+    <meta name="keywords" content="Peta Interaktif, Penggunaan Lahan, Padukuhan Penggung, GIS, Leaflet, TurfJS, Visualisasi Data">
+    <meta name="author" content="Antigravity AI">
+
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --panel-bg: rgba(17, 24, 39, 0.88);
+            --panel-border: rgba(255, 255, 255, 0.12);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            
+            /* Landuse Colors */
+            --color-batas: #ef4444;
+            --color-hutan: #10b981;
+            --color-kebun: #84cc16;
+            --color-pemukiman: #f97316;
+            --color-sawah: #eab308;
+
+            /* Plant Colors */
+            --color-cengkeh: #a855f7;
+            --color-jahe: #b45309;
+            --color-kelapa: #06b6d4;
+            --color-ketela: #ec4899;
+            --color-padi: #0284c7;
+            --color-pisang: #f472b6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-dark);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(59, 130, 246, 0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .loading-status-list {
+            list-style: none;
+            width: 340px;
+            margin-top: 16px;
+        }
+
+        .loading-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 6px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .loading-item .status-icon {
+            font-size: 13px;
+        }
+
+        .loading-item.pending { color: var(--text-muted); }
+        .loading-item.loading { color: var(--accent); }
+        .loading-item.success { color: var(--color-hutan); }
+        .loading-item.error { color: #ef4444; }
+
+        /* Map styling */
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Floating Sidebar Panel */
+        #sidebar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            bottom: 20px;
+            width: 420px;
+            z-index: 1000;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+        }
+
+        #sidebar.collapsed {
+            transform: translateX(-460px);
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--panel-border);
+            position: relative;
+        }
+
+        .sidebar-title-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sidebar-title-container i {
+            font-size: 24px;
+            color: var(--accent);
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+
+        .sidebar-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .sidebar-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Custom Scrollbar */
+        .sidebar-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Cards inside Sidebar */
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title i {
+            color: var(--accent);
+        }
+
+        /* Statistics Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-box.full-width {
+            grid-column: span 2;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(168, 85, 247, 0.05));
+            border-color: rgba(59, 130, 246, 0.15);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .stat-box.full-width .stat-value {
+            font-size: 22px;
+            color: #60a5fa;
+        }
+
+        /* Chart card styling */
+        .chart-container {
+            position: relative;
+            height: 180px;
+            width: 100%;
+        }
+
+        /* Interactive Controls */
+        .control-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .control-label-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .control-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .control-details {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Switch styling */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.15);
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(18px);
+        }
+
+        /* Detail Panel Table */
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .info-table th {
+            text-align: left;
+            padding: 8px 10px;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            width: 40%;
+        }
+
+        .info-table td {
+            padding: 8px 10px;
+            color: #ffffff;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .info-table tr:last-child th,
+        .info-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .placeholder-text {
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+            padding: 20px 10px;
+            font-style: italic;
+        }
+
+        /* Floating Sidebar Toggle Button */
+        #sidebar-toggle {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 46px;
+            height: 46px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 999;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
+        }
+
+        #sidebar-toggle.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        #sidebar-toggle:hover {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: var(--accent);
+        }
+
+        .close-sidebar-btn {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            color: var(--text-muted);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.2s;
+        }
+
+        .close-sidebar-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            color: #ffffff;
+            border-color: rgba(59, 130, 246, 0.5);
+            transform: scale(1.05);
+        }
+
+        /* Map Search Overlay */
+        .map-overlay-search {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 999;
+            display: flex;
+            gap: 8px;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 260px;
+            height: 46px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 0 16px 0 40px;
+            color: #ffffff;
+            font-size: 13px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            width: 320px;
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
+        }
+
+        .search-input-wrapper i {
+            position: absolute;
+            left: 14px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .map-tool-btn {
+            width: 46px;
+            height: 46px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .map-tool-btn:hover {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: var(--accent);
+        }
+
+        /* Search Autocomplete Panel */
+        .search-results {
+            position: absolute;
+            top: 52px;
+            left: 0;
+            width: 100%;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-height: 250px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .search-result-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.2s;
+            font-size: 13px;
+        }
+
+        .search-result-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .search-result-item .item-title {
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .search-result-item .item-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Custom Leaflet Control Theme */
+        .leaflet-bar {
+            border: 1px solid var(--panel-border) !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        /* Push zoom control up so it doesn't overlap the coordinate badge */
+        .leaflet-bottom.leaflet-right {
+            bottom: 60px !important;
+            right: 20px !important;
+        }
+
+        .leaflet-bar a {
+            background-color: var(--panel-bg) !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid var(--panel-border) !important;
+            backdrop-filter: blur(10px) !important;
+            transition: all 0.2s;
+        }
+
+        .leaflet-bar a:hover {
+            background-color: rgba(30, 41, 59, 0.95) !important;
+            color: var(--accent) !important;
+        }
+
+        .leaflet-container {
+            background-color: var(--bg-dark) !important;
+        }
+
+        /* Styled Leaflet Popups */
+        .leaflet-popup-content-wrapper {
+            background: var(--panel-bg) !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--panel-border) !important;
+            border-radius: 12px !important;
+            backdrop-filter: blur(12px) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important;
+        }
+
+        .leaflet-popup-tip {
+            background: var(--panel-bg) !important;
+            border: 1px solid var(--panel-border) !important;
+        }
+
+        .popup-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .popup-content {
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .popup-area {
+            font-weight: 600;
+            color: var(--accent);
+            margin-top: 4px;
+        }
+
+        /* Floating Info Badge on Map */
+        .map-info-badge {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+
+        .map-info-badge i {
+            color: var(--color-hutan);
+        }
+
+        /* Responsive Mobile Layout */
+        @media (max-width: 992px) {
+            #sidebar {
+                width: 360px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #app-container {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                position: fixed;
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: 50%;
+                margin: 0;
+                border-radius: 20px 20px 0 0;
+                border-width: 1px 0 0 0;
+                transform: translateY(0);
+            }
+
+            #sidebar.collapsed {
+                transform: translateY(100%);
+            }
+
+            #sidebar-toggle {
+                bottom: calc(50% + 20px);
+                top: auto;
+                left: 20px;
+            }
+
+            .map-overlay-search {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+            }
+
+            .search-input {
+                width: 100%;
+            }
+
+            .search-input:focus {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="loading-title">Memuat Peta Penggunaan Lahan</div>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Membaca dan memproses berkas spasial...</p>
+        <ul class="loading-status-list" id="loading-status-list">
+            <!-- Items filled dynamically -->
+        </ul>
+    </div>
+
+    <!-- Sidebar Toggle (When collapsed) -->
+    <button id="sidebar-toggle" title="Tampilkan Dasbor">
+        <i class="fa-solid fa-chart-simple"></i>
+    </button>
+
+    <div id="app-container">
+        <!-- Sidebar Panel -->
+        <aside id="sidebar">
+            <button class="close-sidebar-btn" id="close-sidebar" title="Sembunyikan Dasbor">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            
+            <div class="sidebar-header">
+                <div class="sidebar-title-container">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                    <h1 class="sidebar-title">Peta Lahan Penggung</h1>
+                </div>
+                <p class="sidebar-subtitle">Dasbor Interaktif Penggunaan Lahan Padukuhan Penggung</p>
+            </div>
+
+            <div class="sidebar-content">
+                <!-- Overview Stats -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-gauge"></i> Ringkasan Statistik
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-box full-width">
+                            <span class="stat-label">Total Luas Wilayah</span>
+                            <span class="stat-value" id="stat-total-area">0.0000 Ha</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Hutan</span>
+                            <span class="stat-value" id="stat-hutan-area">0.00 Ha</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Sawah</span>
+                            <span class="stat-value" id="stat-sawah-area">0.00 Ha</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Kebun</span>
+                            <span class="stat-value" id="stat-kebun-area">0.00 Ha</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Pemukiman</span>
+                            <span class="stat-value" id="stat-pemukiman-area">0.00 Ha</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Landuse Distribution Chart Card -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-chart-pie"></i> Distribusi Penggunaan Lahan
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="landuse-chart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Plant Species Distribution Chart Card -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-seedling"></i> Distribusi Jenis Tanaman
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="plant-chart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Layer Lahan Controls -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-layer-group"></i> Layer Lahan & Legenda
+                    </div>
+                    <div class="control-list" id="control-list-lahan">
+                        <!-- Filled dynamically -->
+                    </div>
+                </section>
+
+                <!-- Layer Tanaman Controls -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-seedling"></i> Layer Tanaman & Legenda
+                    </div>
+                    <div class="control-list" id="control-list-tanaman">
+                        <!-- Filled dynamically -->
+                    </div>
+                </section>
+
+                <!-- Details Panel -->
+                <section class="card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-circle-info"></i> Atribut Lahan Terpilih
+                    </div>
+                    <div id="detail-panel-body">
+                        <p class="placeholder-text">Klik salah satu poligon lahan pada peta untuk menampilkan detail atribut di sini.</p>
+                    </div>
+                </section>
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <main id="map"></main>
+
+        <!-- Map Controls & Search Overlay -->
+        <div class="map-overlay-search">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="search-input" id="search-box" placeholder="Cari area / atribut lahan..." autocomplete="off">
+                <div class="search-results" id="search-results">
+                    <!-- Search Autocomplete Items -->
+                </div>
+            </div>
+            <button class="map-tool-btn" id="basemap-toggle" title="Ganti Base Map">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+            <button class="map-tool-btn" id="fit-bounds-btn" title="Fokus Keseluruhan Wilayah">
+                <i class="fa-solid fa-maximize"></i>
+            </button>
+        </div>
+
+        <!-- Map Info Badge -->
+        <div class="map-info-badge">
+            <i class="fa-solid fa-circle-dot"></i>
+            <span>Koordinat: <span id="coordinate-display">0.00000, 0.00000</span></span>
+        </div>
+    </div>
+
+    <!-- External CDNs -->
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- JSZip 3.10.1 (High compatibility zip reader) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Proj4js (Coordinate Reprojection) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    <!-- shapefile-js (shpjs) -->
+    <script src="https://unpkg.com/shpjs@3.6.3/dist/shp.js"></script>
+    <!-- Turf.js (for spatial area calculations) -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Configuration & Data sources
+            const dataLayers = [
+                {
+                    id: 'batas',
+                    name: 'Batas Padukuhan Penggung',
+                    category: 'lahan',
+                    url: 'BATAS_PADUKUHAN_PENGGUNG.dat',
+                    color: '#ef4444',
+                    style: {
+                        color: '#ef4444',
+                        weight: 3.5,
+                        dashArray: '8, 5',
+                        fillOpacity: 0.0,
+                        fillColor: 'transparent'
+                    },
+                    isBoundary: true,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'hutan',
+                    name: 'Hutan',
+                    category: 'lahan',
+                    url: 'HUTAN.dat',
+                    color: '#10b981',
+                    style: {
+                        color: '#047857',
+                        weight: 1.5,
+                        fillColor: '#10b981',
+                        fillOpacity: 0.65
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'kebun',
+                    name: 'Kebun',
+                    category: 'lahan',
+                    url: 'KEBUN.dat',
+                    color: '#84cc16',
+                    style: {
+                        color: '#4d7c0f',
+                        weight: 1.5,
+                        fillColor: '#84cc16',
+                        fillOpacity: 0.65
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'pemukiman',
+                    name: 'Pemukiman',
+                    category: 'lahan',
+                    url: 'PEMUKIMAN.dat',
+                    color: '#f97316',
+                    style: {
+                        color: '#c2410c',
+                        weight: 1.5,
+                        fillColor: '#f97316',
+                        fillOpacity: 0.65
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'sawah',
+                    name: 'Sawah',
+                    category: 'lahan',
+                    url: 'SAWAH.dat',
+                    color: '#eab308',
+                    style: {
+                        color: '#a16207',
+                        weight: 1.5,
+                        fillColor: '#eab308',
+                        fillOpacity: 0.65
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                // --- PLANT LAYERS (OFF BY DEFAULT) ---
+                {
+                    id: 'cengkeh',
+                    name: 'Cengkeh',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'CENGKEH.dat',
+                    color: '#a855f7',
+                    style: {
+                        color: '#7e22ce',
+                        weight: 1.5,
+                        fillColor: '#a855f7',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'jahe',
+                    name: 'Jahe',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'JAHE.dat',
+                    color: '#b45309',
+                    style: {
+                        color: '#78350f',
+                        weight: 1.5,
+                        fillColor: '#b45309',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'kelapa',
+                    name: 'Kelapa',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'KELAPA.dat',
+                    color: '#06b6d4',
+                    style: {
+                        color: '#0e7490',
+                        weight: 1.5,
+                        fillColor: '#06b6d4',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'ketela',
+                    name: 'Ketela',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'KETELA.dat',
+                    color: '#ec4899',
+                    style: {
+                        color: '#be185d',
+                        weight: 1.5,
+                        fillColor: '#ec4899',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'padi',
+                    name: 'Padi',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'PADI.dat',
+                    color: '#0284c7',
+                    style: {
+                        color: '#0369a1',
+                        weight: 1.5,
+                        fillColor: '#0284c7',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                },
+                {
+                    id: 'pisang',
+                    name: 'Pisang',
+                    category: 'tanaman',
+                    defaultVisible: false,
+                    url: 'PISANG.dat',
+                    color: '#f472b6',
+                    style: {
+                        color: '#db2777',
+                        weight: 1.5,
+                        fillColor: '#f472b6',
+                        fillOpacity: 0.8
+                    },
+                    isBoundary: false,
+                    loaded: false,
+                    data: null,
+                    leafletLayer: null
+                }
+            ];
+
+            // Map State
+            let map;
+            let currentBasemap = 'satellite'; // Default to Esri Satellite
+            let basemaps = {};
+            let chartInstance = null;
+            let plantChartInstance = null;
+            let allFeatures = []; // For search auto-complete
+            let areaStats = {
+                total: 0,
+                hutan: 0,
+                sawah: 0,
+                kebun: 0,
+                pemukiman: 0
+            };
+
+            // Function to check and reproject UTM 49S coordinates to WGS84 if necessary
+            function ensureWGS84(geojson) {
+                // Proj4 definition for UTM Zone 49S (Yogyakarta / Karangmojo region)
+                const utm49s = "+proj=utm +zone=49 +south +datum=WGS84 +units=m +no_defs";
+
+                function convertCoord(coord) {
+                    if (!Array.isArray(coord) || coord.length < 2) return coord;
+                    const x = coord[0];
+                    const y = coord[1];
+                    // If coordinate values are large (UTM meters), reproject to Lat/Lng
+                    if (Math.abs(x) > 180 || Math.abs(y) > 90) {
+                        try {
+                            if (typeof proj4 !== 'undefined') {
+                                const res = proj4(utm49s, "WGS84", [x, y]);
+                                return [res[0], res[1]];
+                            }
+                        } catch (e) {
+                            console.error("Proj4 conversion error:", e);
+                        }
+                    }
+                    return coord;
+                }
+
+                function processGeometry(geom) {
+                    if (!geom || !geom.coordinates) return;
+                    if (geom.type === 'Point') {
+                        geom.coordinates = convertCoord(geom.coordinates);
+                    } else if (geom.type === 'LineString' || geom.type === 'MultiPoint') {
+                        geom.coordinates = geom.coordinates.map(convertCoord);
+                    } else if (geom.type === 'Polygon' || geom.type === 'MultiLineString') {
+                        geom.coordinates = geom.coordinates.map(ring => ring.map(convertCoord));
+                    } else if (geom.type === 'MultiPolygon') {
+                        geom.coordinates = geom.coordinates.map(poly => poly.map(ring => ring.map(convertCoord)));
+                    }
+                }
+
+                if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features)) {
+                    geojson.features.forEach(f => { if (f.geometry) processGeometry(f.geometry); });
+                } else if (geojson.type === 'Feature' && geojson.geometry) {
+                    processGeometry(geojson.geometry);
+                }
+                return geojson;
+            }
+
+            // Initialize Loading UI
+            const loadingList = document.getElementById('loading-status-list');
+            dataLayers.forEach(layer => {
+                const li = document.createElement('li');
+                li.id = `loading-${layer.id}`;
+                li.className = 'loading-item pending';
+                li.innerHTML = `
+                    <span>${layer.name}</span>
+                    <span class="status-icon"><i class="fa-regular fa-circle-question"></i> Menunggu...</span>
+                `;
+                loadingList.appendChild(li);
+            });
+
+            function updateLoadingStatus(id, status, errorMsg = '') {
+                const el = document.getElementById(`loading-${id}`);
+                if (!el) return;
+                
+                el.className = `loading-item ${status}`;
+                if (status === 'loading') {
+                    el.innerHTML = `
+                        <span>${dataLayers.find(l => l.id === id).name}</span>
+                        <span class="status-icon"><i class="fa-solid fa-spinner fa-spin"></i> Memproses...</span>
+                    `;
+                } else if (status === 'success') {
+                    el.innerHTML = `
+                        <span>${dataLayers.find(l => l.id === id).name}</span>
+                        <span class="status-icon" style="color: var(--color-hutan)"><i class="fa-solid fa-circle-check"></i> Berhasil</span>
+                    `;
+                } else if (status === 'error') {
+                    el.innerHTML = `
+                        <span>${dataLayers.find(l => l.id === id).name}</span>
+                        <span class="status-icon" style="color: #ef4444" title="${errorMsg}"><i class="fa-solid fa-circle-exclamation"></i> Error</span>
+                    `;
+                }
+            }
+
+            // Initialize Map
+            function initMap() {
+                // Default position (Yogyakarta region)
+                map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([-7.96, 110.63], 13);
+
+                // Add Zoom Control to Bottom Right
+                L.control.zoom({
+                    position: 'bottomright'
+                }).addTo(map);
+
+                // Initialize Basemaps
+                basemaps.satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    maxZoom: 19
+                });
+
+                basemaps.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 20
+                });
+
+                basemaps.light = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 20
+                });
+
+                // Default Basemap is ESRI Satellite
+                basemaps.satellite.addTo(map);
+
+                // Create custom panes for strict layer z-index ordering
+                // Landuse polygons (base layer): zIndex 400
+                map.createPane('landusePane');
+                map.getPane('landusePane').style.zIndex = 400;
+
+                // Boundary outline layer: zIndex 410 (pointerEvents: none so clicks pass through)
+                map.createPane('boundaryPane');
+                map.getPane('boundaryPane').style.zIndex = 410;
+                map.getPane('boundaryPane').style.pointerEvents = 'none';
+
+                // Plant features (ALWAYS ON TOP of land use polygons): zIndex 420
+                map.createPane('plantPane');
+                map.getPane('plantPane').style.zIndex = 420;
+
+                // Track coordinates on map hover
+                map.on('mousemove', (e) => {
+                    document.getElementById('coordinate-display').innerText = 
+                        `${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+                });
+            }
+
+            // Calculate area of each polygon using TurfJS
+            function calculateLayerAreas(geojson, layerId) {
+                let layerArea = 0;
+                if (!geojson) return 0;
+
+                const features = geojson.features || (geojson.type === 'Feature' ? [geojson] : []);
+                features.forEach((feature, index) => {
+                    try {
+                        const areaM2 = turf.area(feature);
+                        feature.properties._calculated_area_m2 = areaM2;
+                        feature.properties._calculated_area_ha = areaM2 / 10000;
+                        feature.properties._landuse_type = layerId;
+                        
+                        // Add unique ID for search / select reference
+                        feature.properties._unique_id = `${layerId}-${index}`;
+
+                        layerArea += areaM2;
+
+                        // Add to global search index if not a boundary layer
+                        if (layerId !== 'batas') {
+                            allFeatures.push(feature);
+                        }
+                    } catch (e) {
+                        console.error("Error calculating area for feature", index, e);
+                    }
+                });
+
+                return layerArea;
+            }
+
+            // Load and Process Shapefiles via JSZip & shpjs
+            async function loadData() {
+                initMap();
+                
+                const loadPromises = dataLayers.map(async (layer) => {
+                    updateLoadingStatus(layer.id, 'loading');
+                    try {
+                        // Try loading from live data.php proxy first, fallback to static .dat file
+                        let fetchUrl = `data.php?layer=${layer.id}&t=${Date.now()}`;
+                        console.log(`Mengunduh: ${fetchUrl}`);
+                        let response = await fetch(fetchUrl);
+                        if (!response.ok) {
+                            console.warn(`Fall back to static file for ${layer.name}`);
+                            fetchUrl = `${layer.url}?t=${Date.now()}`;
+                            response = await fetch(fetchUrl);
+                        }
+                        if (!response.ok) {
+                            throw new Error(`Gagal mengunduh berkas (HTTP status ${response.status})`);
+                        }
+                        const zipBuffer = await response.arrayBuffer();
+                        if (zipBuffer.byteLength === 0) {
+                            throw new Error(`Berkas ZIP kosong (0 bytes).`);
+                        }
+
+                        // Unzip using JSZip 3.10.1
+                        const zip = await JSZip.loadAsync(zipBuffer);
+                        
+                        let shpBuffer = null;
+                        let dbfBuffer = null;
+                        let prjString = null;
+
+                        for (const filename of Object.keys(zip.files)) {
+                            const entry = zip.files[filename];
+                            if (entry.dir) continue;
+                            const lower = filename.toLowerCase();
+                            if (lower.endsWith('.shp')) {
+                                shpBuffer = await entry.async('arraybuffer');
+                            } else if (lower.endsWith('.dbf')) {
+                                dbfBuffer = await entry.async('arraybuffer');
+                            } else if (lower.endsWith('.prj')) {
+                                const text = await entry.async('string');
+                                if (text && text.trim().length > 0) {
+                                    prjString = text.trim();
+                                }
+                            }
+                        }
+
+                        if (!shpBuffer) {
+                            throw new Error(`File .shp tidak ditemukan di dalam ${layer.name}`);
+                        }
+
+                        // Parse geometries and attributes cleanly
+                        let geojson;
+                        try {
+                            const geometries = shp.parseShp(shpBuffer, prjString);
+                            const attributes = dbfBuffer ? shp.parseDbf(dbfBuffer) : [];
+                            geojson = shp.combine([geometries, attributes]);
+                        } catch (parseErr) {
+                            console.warn(`Fall back parsing for ${layer.name}:`, parseErr);
+                            geojson = await shp(zipBuffer);
+                        }
+
+                        // Ensure coordinates are reprojected to WGS84 if they are in UTM
+                        geojson = ensureWGS84(geojson);
+
+                        layer.data = geojson;
+                        layer.loaded = true;
+
+                        // Calculate areas
+                        const areaM2 = calculateLayerAreas(geojson, layer.id);
+                        if (!layer.isBoundary) {
+                            areaStats[layer.id] = areaM2;
+                        }
+
+                        updateLoadingStatus(layer.id, 'success');
+                    } catch (err) {
+                        console.error(`Error loading layer ${layer.name}:`, err);
+                        updateLoadingStatus(layer.id, 'error', err.message);
+                    }
+                });
+
+                // Wait for all loads to finish
+                await Promise.all(loadPromises);
+
+                // Calculate total area (sum of all landuse categories)
+                areaStats.total = areaStats.hutan + areaStats.sawah + areaStats.kebun + areaStats.pemukiman;
+
+                // Render maps and update UI
+                renderMapLayers();
+                updateStatsUI();
+                renderLanduseChart();
+                renderPlantChart();
+                buildControlUI();
+                initSearch();
+
+                // Fit map to boundary or all layers loaded
+                fitToLayers();
+
+                // Fade out loading screen
+                setTimeout(() => {
+                    const screen = document.getElementById('loading-screen');
+                    screen.style.opacity = 0;
+                    setTimeout(() => screen.style.display = 'none', 500);
+                }, 800);
+            }
+
+            // Style function for GeoJSON layers
+            function getLayerStyle(layer, feature) {
+                return {
+                    ...layer.style
+                };
+            }
+
+            // Add layers to Leaflet Map
+            function renderMapLayers() {
+                dataLayers.forEach(layer => {
+                    if (!layer.loaded || !layer.data) return;
+
+                    // Assign layer to its dedicated map pane
+                    const targetPane = layer.isBoundary ? 'boundaryPane' : (layer.category === 'tanaman' ? 'plantPane' : 'landusePane');
+
+                    const geojsonLayer = L.geoJSON(layer.data, {
+                        pane: targetPane,
+                        interactive: !layer.isBoundary,
+                        style: (feature) => getLayerStyle(layer, feature),
+                        pointToLayer: (feature, latlng) => {
+                            return L.circleMarker(latlng, {
+                                pane: targetPane,
+                                radius: 7,
+                                fillColor: layer.color,
+                                color: '#ffffff',
+                                weight: 2,
+                                opacity: 1,
+                                fillOpacity: 0.85
+                            });
+                        },
+                        onEachFeature: (feature, leafletFeature) => {
+                            if (layer.isBoundary) return;
+
+                            leafletFeature.on({
+                                mouseover: (e) => {
+                                    const lf = e.target;
+                                    if (typeof lf.setStyle === 'function') {
+                                        lf.setStyle({
+                                            fillOpacity: 0.95,
+                                            weight: 2.5,
+                                            color: '#ffffff'
+                                        });
+                                    }
+                                },
+                                mouseout: (e) => {
+                                    geojsonLayer.resetStyle(e.target);
+                                },
+                                click: (e) => {
+                                    if (e.originalEvent) {
+                                        L.DomEvent.stopPropagation(e.originalEvent);
+                                    }
+                                    selectFeature(feature, e.target);
+                                    
+                                    const areaHaVal = feature.properties._calculated_area_ha || 0;
+                                    const isPlant = layer.category === 'tanaman';
+                                    let popupContent = `
+                                        <div class="popup-title">
+                                            <i class="fa-solid ${isPlant ? 'fa-seedling' : 'fa-draw-polygon'}" style="color: ${layer.color}"></i>
+                                            ${isPlant ? 'Tanaman ' : 'Lahan '}${layer.name}
+                                        </div>
+                                        <div class="popup-content">
+                                            ${areaHaVal > 0 ? `<div class="popup-area">Luas: ${areaHaVal.toFixed(4)} Ha</div>` : '<div class="popup-area">Titik Lokasi Tanaman</div>'}
+                                            <div style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">
+                                                Klik di sidebar untuk detail atribut lengkap.
+                                            </div>
+                                        </div>
+                                    `;
+                                    e.target.bindPopup(popupContent).openPopup();
+                                }
+                            });
+                        }
+                    });
+
+                    layer.leafletLayer = geojsonLayer;
+                    
+                    // Only add layer to map if defaultVisible is true (Plant layers are OFF by default)
+                    if (layer.defaultVisible !== false) {
+                        geojsonLayer.addTo(map);
+                    }
+                });
+            }
+
+            // Focus map on the loaded layers
+            function fitToLayers() {
+                // Focus on boundary layer if loaded, otherwise fit all layers
+                const boundaryLayer = dataLayers.find(l => l.id === 'batas');
+                if (boundaryLayer && boundaryLayer.loaded && boundaryLayer.leafletLayer) {
+                    try {
+                        map.fitBounds(boundaryLayer.leafletLayer.getBounds(), { padding: [30, 30] });
+                    } catch (e) {
+                        console.warn("Could not fit to boundary bounds", e);
+                    }
+                } else {
+                    const group = new L.featureGroup(
+                        dataLayers.filter(l => l.loaded && l.leafletLayer).map(l => l.leafletLayer)
+                    );
+                    if (group.getLayers().length > 0) {
+                        try {
+                            map.fitBounds(group.getBounds(), { padding: [30, 30] });
+                        } catch (e) {}
+                    }
+                }
+            }
+
+            // Action when feature is clicked
+            function selectFeature(feature, leafletLayer) {
+                const detailContainer = document.getElementById('detail-panel-body');
+                const layerId = feature.properties._landuse_type;
+                const layer = dataLayers.find(l => l.id === layerId) || { name: 'Terpilih', color: '#3b82f6', category: 'lahan' };
+                
+                let detailsHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                        <div class="color-indicator" style="background-color: ${layer.color}"></div>
+                        <span style="font-weight: 700; font-size: 14px; text-transform: uppercase;">${layer.category === 'tanaman' ? 'Tanaman ' : 'Lahan '}${layer.name}</span>
+                    </div>
+                `;
+
+                // Build Table of properties
+                detailsHTML += '<table class="info-table">';
+                
+                // Add area calculation
+                const areaHa = feature.properties._calculated_area_ha || 0;
+                const areaM2 = feature.properties._calculated_area_m2 || 0;
+                if (areaHa > 0) {
+                    detailsHTML += `
+                        <tr>
+                            <th>Luas Area (Geo)</th>
+                            <td>${areaHa.toFixed(4)} Ha <br><span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">(${areaM2.toLocaleString('id-ID', {maximumFractionDigits: 1})} m²)</span></td>
+                        </tr>
+                    `;
+                }
+
+                // Add other DBF properties dynamically
+                let hasProps = false;
+                for (let key in feature.properties) {
+                    if (!key.startsWith('_')) { // Exclude internal variables
+                        hasProps = true;
+                        let val = feature.properties[key];
+                        if (val === null || val === undefined || val === '') val = '-';
+                        detailsHTML += `
+                            <tr>
+                                <th>${key}</th>
+                                <td>${val}</td>
+                            </tr>
+                        `;
+                    }
+                }
+
+                if (!hasProps) {
+                    detailsHTML += `
+                        <tr>
+                            <td colspan="2" style="font-style: italic; text-align: center; color: var(--text-muted); font-weight: normal; padding: 12px 0;">
+                                Tidak ada atribut khusus di data spasial.
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                detailsHTML += '</table>';
+                
+                // Add zoom action in details panel
+                detailsHTML += `
+                    <button class="map-tool-btn" id="zoom-to-feature" style="width: 100%; height: 36px; margin-top: 14px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i> Fokus ke Lahan Ini
+                    </button>
+                `;
+
+                detailContainer.innerHTML = detailsHTML;
+
+                // Zoom button action
+                document.getElementById('zoom-to-feature').addEventListener('click', () => {
+                    if (leafletLayer) {
+                        map.fitBounds(leafletLayer.getBounds(), { maxZoom: 18, padding: [40, 40] });
+                    }
+                });
+
+                // Expand sidebar if collapsed on select
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar.classList.contains('collapsed')) {
+                    sidebar.classList.remove('collapsed');
+                    document.getElementById('sidebar-toggle').classList.remove('visible');
+                }
+            }
+
+            // Update stats cards in Sidebar
+            function updateStatsUI() {
+                const formatHa = (m2) => (m2 / 10000).toFixed(4) + ' Ha';
+                
+                document.getElementById('stat-total-area').innerText = formatHa(areaStats.total);
+                document.getElementById('stat-hutan-area').innerText = formatHa(areaStats.hutan);
+                document.getElementById('stat-sawah-area').innerText = formatHa(areaStats.sawah);
+                document.getElementById('stat-kebun-area').innerText = formatHa(areaStats.kebun);
+                document.getElementById('stat-pemukiman-area').innerText = formatHa(areaStats.pemukiman);
+            }
+
+            // Render Landuse Chart.js
+            function renderLanduseChart() {
+                const ctx = document.getElementById('landuse-chart');
+                if (!ctx) return;
+                
+                const landuseLayers = dataLayers.filter(l => l.category === 'lahan' && !l.isBoundary);
+                const labels = landuseLayers.map(l => l.name);
+                const dataValues = landuseLayers.map(l => ((areaStats[l.id] || 0) / 10000));
+                const colors = ['#10b981', '#84cc16', '#f97316', '#eab308'];
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                chartInstance = new Chart(ctx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: dataValues,
+                            backgroundColor: colors,
+                            borderWidth: 1.5,
+                            borderColor: '#1e293b',
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                        return ` Luas: ${value.toFixed(2)} Ha (${pct}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '65%'
+                    }
+                });
+            }
+
+            // Render Plant Species Chart.js
+            function renderPlantChart() {
+                const ctx = document.getElementById('plant-chart');
+                if (!ctx) return;
+
+                const plantLayers = dataLayers.filter(l => l.category === 'tanaman');
+                const labels = plantLayers.map(l => l.name);
+                const colors = plantLayers.map(l => l.color);
+                
+                const dataValues = plantLayers.map(l => {
+                    const areaM2 = areaStats[l.id] || 0;
+                    if (areaM2 > 0) {
+                        return (areaM2 / 10000);
+                    } else if (l.data && l.data.features) {
+                        return l.data.features.length;
+                    }
+                    return 0;
+                });
+
+                if (plantChartInstance) {
+                    plantChartInstance.destroy();
+                }
+
+                plantChartInstance = new Chart(ctx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: dataValues,
+                            backgroundColor: colors,
+                            borderWidth: 1.5,
+                            borderColor: '#1e293b',
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                        const layer = plantLayers[context.dataIndex];
+                                        const hasArea = (areaStats[layer.id] || 0) > 0;
+                                        if (hasArea) {
+                                            return ` ${layer.name}: ${value.toFixed(2)} Ha (${pct}%)`;
+                                        } else {
+                                            return ` ${layer.name}: ${value} Lokasi (${pct}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '65%'
+                    }
+                });
+            }
+
+            // Build Layer Controls and Custom Legends
+            function buildControlUI() {
+                const controlListLahan = document.getElementById('control-list-lahan');
+                const controlListTanaman = document.getElementById('control-list-tanaman');
+                if (controlListLahan) controlListLahan.innerHTML = '';
+                if (controlListTanaman) controlListTanaman.innerHTML = '';
+
+                dataLayers.forEach(layer => {
+                    if (!layer.loaded) return;
+
+                    const container = (layer.category === 'tanaman') ? controlListTanaman : controlListLahan;
+                    if (!container) return;
+
+                    const areaM2Val = areaStats[layer.id] || 0;
+                    let detailText = '';
+                    if (layer.isBoundary) {
+                        detailText = 'Batas Administratif';
+                    } else if (areaM2Val > 0) {
+                        detailText = `${(areaM2Val / 10000).toFixed(2)} Ha`;
+                    } else {
+                        const count = (layer.data && layer.data.features) ? layer.data.features.length : 0;
+                        detailText = `${count} Lokasi`;
+                    }
+                    
+                    const item = document.createElement('div');
+                    item.className = 'control-item';
+                    const dotColor = layer.color || '#3b82f6';
+
+                    const isChecked = (layer.defaultVisible !== false) ? 'checked' : '';
+
+                    item.innerHTML = `
+                        <div class="control-label-group">
+                            <div class="color-indicator" style="background-color: ${dotColor}; ${layer.isBoundary ? 'border: 2px dashed #ef4444; background: transparent;' : ''}"></div>
+                            <div>
+                                <span class="control-name">${layer.name}</span>
+                                <div class="control-details">${detailText}</div>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-layer-${layer.id}" ${isChecked}>
+                            <span class="slider"></span>
+                        </label>
+                    `;
+
+                    container.appendChild(item);
+
+                    // Toggle layer visibility
+                    const checkbox = document.getElementById(`toggle-layer-${layer.id}`);
+                    if (checkbox) {
+                        checkbox.addEventListener('change', (e) => {
+                            if (e.target.checked) {
+                                map.addLayer(layer.leafletLayer);
+                            } else {
+                                map.removeLayer(layer.leafletLayer);
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Initialize Search Functionality
+            function initSearch() {
+                const searchBox = document.getElementById('search-box');
+                const searchResults = document.getElementById('search-results');
+
+                searchBox.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase().trim();
+                    searchResults.innerHTML = '';
+
+                    if (!query) {
+                        searchResults.style.display = 'none';
+                        return;
+                    }
+
+                    const matches = allFeatures.filter(feature => {
+                        for (let key in feature.properties) {
+                            if (!key.startsWith('_')) {
+                                const val = String(feature.properties[key]).toLowerCase();
+                                if (val.includes(query)) return true;
+                            }
+                        }
+                        const layer = dataLayers.find(l => l.id === feature.properties._landuse_type);
+                        if (layer && layer.name.toLowerCase().includes(query)) return true;
+                        
+                        return false;
+                    }).slice(0, 5);
+
+                    if (matches.length === 0) {
+                        searchResults.innerHTML = '<div class="search-result-item" style="cursor: default; color: var(--text-muted);">Tidak ada area yang cocok</div>';
+                        searchResults.style.display = 'block';
+                        return;
+                    }
+
+                    matches.forEach(match => {
+                        const layer = dataLayers.find(l => l.id === match.properties._landuse_type);
+                        const areaHa = match.properties._calculated_area_ha;
+                        
+                        let displayTitle = `Lahan ${layer.name}`;
+                        let displaySubtitle = `Luas: ${areaHa.toFixed(4)} Ha`;
+                        
+                        const descKeys = ['nama', 'pemilik', 'klas', 'fungsi', 'id', 'lahan'];
+                        for (let k of descKeys) {
+                            const foundKey = Object.keys(match.properties).find(prop => prop.toLowerCase().includes(k));
+                            if (foundKey && match.properties[foundKey]) {
+                                displayTitle = `${match.properties[foundKey]}`;
+                                displaySubtitle = `Lahan ${layer.name} • Luas: ${areaHa.toFixed(4)} Ha`;
+                                break;
+                            }
+                        }
+
+                        const item = document.createElement('div');
+                        item.className = 'search-result-item';
+                        item.innerHTML = `
+                            <div class="item-title">${displayTitle}</div>
+                            <div class="item-subtitle">${displaySubtitle}</div>
+                        `;
+
+                        item.addEventListener('click', () => {
+                            layer.leafletLayer.eachLayer(lfLayer => {
+                                if (lfLayer.feature.properties._unique_id === match.properties._unique_id) {
+                                    map.fitBounds(lfLayer.getBounds(), { maxZoom: 18, padding: [40, 40] });
+                                    selectFeature(match, lfLayer);
+                                    
+                                    const areaHaVal = (match.properties._calculated_area_ha).toFixed(4);
+                                    lfLayer.bindPopup(`
+                                        <div class="popup-title">
+                                            <i class="fa-solid fa-draw-polygon" style="color: ${layer.color}"></i>
+                                            Lahan ${layer.name}
+                                        </div>
+                                        <div class="popup-content">
+                                            <div class="popup-area">Luas: ${areaHaVal} Ha</div>
+                                        </div>
+                                    `).openPopup();
+                                }
+                            });
+
+                            searchBox.value = '';
+                            searchResults.style.display = 'none';
+                        });
+
+                        searchResults.appendChild(item);
+                    });
+
+                    searchResults.style.display = 'block';
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.search-input-wrapper')) {
+                        searchResults.style.display = 'none';
+                    }
+                });
+            }
+
+            // Basemap Toggle Interaction
+            const basemapBtn = document.getElementById('basemap-toggle');
+            basemapBtn.addEventListener('click', () => {
+                map.removeLayer(basemaps[currentBasemap]);
+                
+                if (currentBasemap === 'satellite') {
+                    currentBasemap = 'dark';
+                    basemapBtn.innerHTML = '<i class="fa-solid fa-sun"></i>';
+                    basemapBtn.title = "Ganti ke Peta Terang";
+                } else if (currentBasemap === 'dark') {
+                    currentBasemap = 'light';
+                    basemapBtn.innerHTML = '<i class="fa-solid fa-satellite"></i>';
+                    basemapBtn.title = "Ganti ke Citra Satelit";
+                } else {
+                    currentBasemap = 'satellite';
+                    basemapBtn.innerHTML = '<i class="fa-solid fa-moon"></i>';
+                    basemapBtn.title = "Ganti ke Peta Gelap";
+                }
+                
+                basemaps[currentBasemap].addTo(map);
+            });
+
+            // Fit Bounds Button
+            document.getElementById('fit-bounds-btn').addEventListener('click', () => {
+                fitToLayers();
+            });
+
+            // Sidebar Collapse/Expand Interaction
+            const sidebar = document.getElementById('sidebar');
+            const closeBtn = document.getElementById('close-sidebar');
+            const toggleBtn = document.getElementById('sidebar-toggle');
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    sidebar.classList.add('collapsed');
+                    toggleBtn.classList.add('visible');
+                });
+            }
+
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    sidebar.classList.remove('collapsed');
+                    toggleBtn.classList.remove('visible');
+                });
+            }
+
+            // Run application
+            loadData();
+        });
+    </script>
+</body>
+</html>
