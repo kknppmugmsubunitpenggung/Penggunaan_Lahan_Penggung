@@ -1282,18 +1282,13 @@
                 const loadPromises = dataLayers.map(async (layer) => {
                     updateLoadingStatus(layer.id, 'loading');
                     try {
-                        // Try loading from live data.php proxy first, fallback to static .dat file
-                        let fetchUrl = `data.php?layer=${layer.id}&t=${Date.now()}`;
-                        console.log(`Mengunduh: ${fetchUrl}`);
-                        let response = await fetch(fetchUrl);
-                        if (!response.ok) {
-                            console.warn(`Fall back to static file for ${layer.name}`);
-                            fetchUrl = `${layer.url}?t=${Date.now()}`;
-                            response = await fetch(fetchUrl);
-                        }
-                        if (!response.ok) {
-                            throw new Error(`Gagal mengunduh berkas (HTTP status ${response.status})`);
-                        }
+                        // Load static .dat file from GitHub Pages
+                        const fetchUrl = `${layer.url}?v=${Date.now()}`;
+const response = await fetch(fetchUrl);
+
+if (!response.ok) {
+    throw new Error(`Tidak dapat memuat ${layer.url}`);
+}
                         const zipBuffer = await response.arrayBuffer();
                         if (zipBuffer.byteLength === 0) {
                             throw new Error(`Berkas ZIP kosong (0 bytes).`);
