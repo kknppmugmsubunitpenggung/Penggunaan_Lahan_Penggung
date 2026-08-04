@@ -1510,19 +1510,26 @@ if (!response.ok) {
 
                 // Add other DBF properties dynamically
                 let hasProps = false;
-                for (let key in feature.properties) {
-                    if (!key.startsWith('_')) { // Exclude internal variables
-                        hasProps = true;
-                        let val = feature.properties[key];
-                        if (val === null || val === undefined || val === '') val = '-';
-                        detailsHTML += `
-                            <tr>
-                                <th>${key}</th>
-                                <td>${val}</td>
-                            </tr>
-                        `;
-                    }
-                }
+               for (let key in feature.properties) {
+
+    // Jangan tampilkan atribut internal
+    if (key.startsWith('_')) continue;
+
+    // Sembunyikan fid untuk layer tanaman
+    if (layer.category === 'tanaman' && key.toLowerCase() === 'fid') continue;
+
+    hasProps = true;
+
+    let val = feature.properties[key];
+    if (val === null || val === undefined || val === '') val = '-';
+
+    detailsHTML += `
+        <tr>
+            <th>${key}</th>
+            <td>${val}</td>
+        </tr>
+    `;
+}
 
                 if (!hasProps) {
                     detailsHTML += `
